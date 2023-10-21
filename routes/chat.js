@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const router = express.Router();
 const Chat = require('../models/chat'); // Import the Chat model
@@ -5,8 +7,8 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const imagePath = path.join(__dirname, '..', 'public', 'images');
-const LocalImgUrl = "https://00c9-103-191-99-45.ngrok-free.app/images/"
-var telnyx = require('telnyx')('KEY0184ECC16BEF4283F3D9E3DAECF94E2A_meL4LKx2rdobYfB6I9FCuC');
+const LocalImgUrl = process.env.IMAGE_URL;
+var telnyx = require('telnyx')(process.env.TELNYX_KEY);
 
 const storage = multer.diskStorage({
 

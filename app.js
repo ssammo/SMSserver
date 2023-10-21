@@ -10,6 +10,9 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var chatRouter = require('./routes/chat');
 
+require('dotenv').config();
+
+
 var app = express();
 
 // Load environment variables (you can use the dotenv package for this)
@@ -18,7 +21,7 @@ var app = express();
 main().catch(err => console.log(err));
 
 async function main() {
-  await mongoose.connect('mongodb://127.0.0.1:27017/chat');
+  await mongoose.connect(process.env.MONGO_URL);
 
   // use `await mongoose.connect('mongodb://user:password@127.0.0.1:27017/test');` if your database has auth enabled
 }
