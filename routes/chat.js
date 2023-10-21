@@ -5,8 +5,8 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const imagePath = path.join(__dirname, '..', 'public', 'images');
-const LocalImgUrl = "http://localhost:5000/images/"
-var telnyx = require('telnyx')('YOUR_API_KEY');
+const LocalImgUrl = "https://00c9-103-191-99-45.ngrok-free.app/images/"
+var telnyx = require('telnyx')('KEY0184ECC16BEF4283F3D9E3DAECF94E2A_meL4LKx2rdobYfB6I9FCuC');
 
 const storage = multer.diskStorage({
 
@@ -48,18 +48,59 @@ router.post('/', async (req, res) => {
 router.post('/webhook', async (req, res) => {
   try {
     console.log(req.body);
-    console.log(JSON.stringify(req.body));
-    const { from, to, text, media } = req.body.data.payload;
+    //console.log(JSON.stringify(req.body));
+    if(req.body.data.event_type=='message.received'){
+      const { from, to, text, media } = req.body.data.payload;
+      const chat = new Chat({
+        senderPhoneNumber: from.phone_number,
+        receivingPhoneNumber: to[0].phone_number,
+        message: text,
+      });
+      if (media.length > 0) chat.imageUrls = [media[0].url];
 
-    // Create a new Chat document and save it to MongoDB
-    const chat = new Chat({
-      senderPhoneNumber: from.phone_number,
-      receivingPhoneNumber: to[0].phone_number,
-      message: text,
-    });
-    if (media.length > 0) chat.imageUrls = [media[0].url];
+      await chat.save();
+    }
+    
 
-    await chat.save();
+    res.status(201).json({ message: 'Message saved successfully' });
+  } catch (error) {
+    console.error('Error processing incoming message:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/call/webhook', async (req, res) => {
+  try {
+    console.log(req.body);
+    //console.log(JSON.stringify(req.body));
+    if(req.body.data.event_type=='call.initiated'){
+      const { from, to } = req.body.data.payload;
+      const chat = new Chat({
+        senderPhoneNumber: from,
+        receivingPhoneNumber: to,
+        message: "Started Phone Call",
+      });
+      await chat.save();
+    }
+    else if(req.body.data.event_type=='call.answered'){
+      const { from, to } = req.body.data.payload;
+      const chat = new Chat({
+        senderPhoneNumber: to,
+        receivingPhoneNumber: from,
+        message: "Answered Phone Call",
+      });
+      await chat.save();
+    }
+    else if(req.body.data.event_type=='call.hangup'){
+      const { from, to } = req.body.data.payload;
+      const chat = new Chat({
+        senderPhoneNumber: to,
+        receivingPhoneNumber: from,
+        message: "Call Ended",
+      });
+      await chat.save();
+    }
+    
 
     res.status(201).json({ message: 'Message saved successfully' });
   } catch (error) {
@@ -120,24 +161,14 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
         },
         function(err, response) {
           // asynchronously called
+          // WTF I will do here!!??
           console.log(response);
+          console.log(err);
         }
       );
     }
     await chat.save();
-    //Here I am going to send sms
-    telnyx.messages.create(
-      {
-        'from': receivingPhoneNumber, // Your Telnyx number
-        'to': dataObj.contact.fullName,
-        'text': dataObj.message
-      },
-      function(err, response) {
-        // asynchronously called
-        console.log(response);
-      }
-    );
-
+    
     const response = { newMessageData, id: dataObj.contact.id }
     res.status(201).json(response);
   } catch (error) {
