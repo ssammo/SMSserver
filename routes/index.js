@@ -1,4 +1,5 @@
 var express = require('express');
+var axios = require('axios');
 var router = express.Router();
 
 require('dotenv').config();
@@ -23,22 +24,39 @@ const jwtConfig = {
 
 /* Post Login Cardinalities */
 router.post('/jwt/login', async function(req, res, next) {
-  console.log(JSON.stringify(req.body));
 
   const { email, password } = req.body;
-
   let error = {
     email: ['Something went wrong']
   }
+
   console.log(email+" ||"+password);
-  const user = await User.findOne({email: email , password: password});
+  const user = await User.findOne({email , password});
   console.log(user);
   if (user) {
     const accessToken = jwt.sign({ id: user.id }, jwtConfig.secret, { expiresIn: jwtConfig.expirationTime })
+    
+    var data = JSON.stringify({});
+    const YOUR_API_KEY = 'KEY0184ECC16BEF4283F3D9E3DAECF94E2A_meL4LKx2rdobYfB6I9FCuC';
+    const credentialId = '780bf85f-0d0c-48e7-855a-de3b2ccd13ce'; 
+    const TelnyxToken = await axios.post(
+      `https://api.telnyx.com/v2/telephony_credentials/${credentialId}/token`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${YOUR_API_KEY}`,
+        },
+      }
+    );
+
+    const TToken = TelnyxToken.data; 
+    console.log("Telnyx Token: "+ TToken);
 
     const response = {
       accessToken,
-      userData: { ...user, password: undefined }
+      TToken,
+      userData: { ...user._doc , password: undefined }
     }
 
     res.status(200).send(response);
@@ -55,24 +73,22 @@ router.get('/auth/me', async function(req, res, next) {
    // ** Get token from header
   // @ts-ignore
   
-  const token = req.headers.Authorization
+  const token = req.headers.authorization
   console.log("Token: "+token);
   // ** Checks if the token is valid or expired
-  jwt.verify(token, jwtConfig.secret, (err, decoded) => {
+  jwt.verify(token, jwtConfig.secret, async (err, decoded) => {
     // ** If token is expired
     if (err) {
       if(err.name=='TokenExpiredError'){
         const oldTokenDecoded = jwt.decode(token, { complete: true })
         const { id: userId } = oldTokenDecoded.payload
-        const user = User.findOne({ id: userId }, user => {
-          // ** Sign a new token
+        const user = await User.findOne({ id: userId })
           const accessToken = jwt.sign({ id: userId }, jwtConfig.secret, {
             expiresIn: jwtConfig.expirationTime
           })
-          const obj = { accessToken, userData: { ...user, password: undefined } }
+          //Need to add TToken Here too
+          const obj = { accessToken, userData: { ...user._doc, password: undefined } }
           res.status(200).send(obj);
-        })
-          
       }
       else{
         //Send Auth Error
@@ -82,10 +98,9 @@ router.get('/auth/me', async function(req, res, next) {
       // ** If token is valid do nothing
       // @ts-ignore
       const userId = decoded.id
-      const user = User.findOne({ id: userId }, user => {
-        const obj = { accessToken: token, userData: { ...user, password: undefined } }
-        res.status(200).send(obj);
-      })
+      const user = await User.findOne({ id: userId })
+      const obj = { accessToken: token, userData: { ...user._doc , password: undefined } }
+      res.status(200).send(obj);
     }
   })
 });
