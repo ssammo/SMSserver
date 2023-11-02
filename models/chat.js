@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 
 const chatSchema = new mongoose.Schema({
+  tId: {
+    type: String,
+    required: false,
+  },
   senderPhoneNumber: {
     type: String,
     required: true,
@@ -25,6 +29,10 @@ const chatSchema = new mongoose.Schema({
       default: false, // You can set a default value if needed
     },
     isDelivered: {
+      type: Boolean,
+      default: false, // You can set a default value if needed
+    },
+    isSeen: {
       type: Boolean,
       default: false, // You can set a default value if needed
     },

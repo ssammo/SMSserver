@@ -47,6 +47,44 @@ router.post('/', async (req, res) => {
 });
 
 // Define a route for receiving incoming messages from Telnyx
+
+const updateChatFeedback = async (id) => {
+  try {
+    const updatedChat = await Chat.findOneAndUpdate(
+      { tId: id },
+      { $set: { 'feedback.isDelivered': true } },
+      { new: true }
+    );
+
+    if (updatedChat) {
+      console.log('Chat feedback updated successfully:', updatedChat);
+    } else {
+      console.log('No chat found with the provided id.');
+    }
+  } catch (error) {
+    console.error('Error updating chat feedback:', error);
+  }
+};
+
+const updateFinalChatFeedback = async (id) => {
+  try {
+    const updatedChat = await Chat.findOneAndUpdate(
+      { tId: id },
+      { $set: { 'feedback.isSeen': true } },
+      { new: true }
+    );
+
+    if (updatedChat) {
+      console.log('Chat feedback updated successfully:', updatedChat);
+    } else {
+      console.log('No chat found with the provided id.');
+    }
+  } catch (error) {
+    console.error('Error updating chat feedback:', error);
+  }
+};
+
+
 router.post('/webhook', async (req, res) => {
   try {
     console.log(req.body);
@@ -61,6 +99,18 @@ router.post('/webhook', async (req, res) => {
       if (media.length > 0) chat.imageUrls = [media[0].url];
 
       await chat.save();
+    }
+
+    if(req.body.data.event_type=='message.sent'){
+      const { id } = req.body.data.payload;
+      updateChatFeedback(id);
+      
+    }
+
+    if(req.body.data.event_type=='message.finalized'){
+      const { id } = req.body.data.payload;
+      updateFinalChatFeedback(id);
+      
     }
     
 
@@ -148,9 +198,19 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
            'to': dataObj.contact.fullName,
            'media_urls': chat.imageUrls
          },
-         function(err, response) {
-           // asynchronously called
-           console.log(response)
+         async function(err, response) {
+          if(response){
+            console.log(response);
+            chat.tId=response.data.id;
+            chat.feedback.isSent=true;
+            await chat.save();
+            const responsex = { newMessageData, id: dataObj.contact.id }
+            res.status(201).json(responsex);
+          }
+          if(err){
+            console.log(err);
+            res.status(500).json({ error: 'Internal Server Error' });
+          }
          }
        );
     }
@@ -161,18 +221,25 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
           'to': dataObj.contact.fullName,
           'text': dataObj.message
         },
-        function(err, response) {
+        async function(err, response) {
           // asynchronously called
           // WTF I will do here!!??
           console.log(response);
-          console.log(err);
+          if(response){
+            chat.tId=response.data.id;
+            chat.feedback.isSent=true;
+            await chat.save();
+            const responsex = { newMessageData, id: dataObj.contact.id }
+            res.status(201).json(responsex);
+          }
+          if(err){
+            console.log(err);
+            res.status(500).json({ error: 'Internal Server Error' });
+          }
         }
       );
     }
-    await chat.save();
     
-    const response = { newMessageData, id: dataObj.contact.id }
-    res.status(201).json(response);
   } catch (error) {
     console.error('Error processing incoming message:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -180,17 +247,9 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
 });
 
 
-
-// Retrieve all chat messages
-// Define a route to get all chats of a specific sender phone number
 router.get('/:receivingPhoneNumber', async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
-
-    // Query the database to find all chats with the specified sender phone number
-    //const chats = await Chat.find({ receivingPhoneNumber });
-    //const senders = await Chat.distinct('senderPhoneNumber', { receivingPhoneNumber });
-
     const data = {
       profileUser: {
         id: 11,
@@ -209,26 +268,9 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
       chats: []
     }
 
-    // const results = await Chat.aggregate([
-    //   {
-    //     $match: { receivingPhoneNumber },
-    //   },
-    //   {
-    //     $sort: { timestamp: -1 }, // Sort chats by timestamp in descending order (newest first)
-    //   },
-    //   {
-    //     $group: {
-    //       _id: '$senderPhoneNumber',
-    //       lastChat: { $first: '$$ROOT' }, // Get the first (latest) chat message for each sender
-    //     },
-    //   },
-    //   {
-    //     $replaceRoot: { newRoot: '$lastChat' }, // Replace the root document with the last chat message
-    //   },
-    // ]);
     const resChat = await Chat.find({
       $or: [{ senderPhoneNumber: receivingPhoneNumber }, { receivingPhoneNumber: receivingPhoneNumber }]
-    })
+    }).sort({ timestamp: -1 });
     var contactCounter = 0;
     resChat.forEach(result => {
       var contactNumber = result.senderPhoneNumber == receivingPhoneNumber ? result.receivingPhoneNumber : result.senderPhoneNumber;
@@ -236,15 +278,16 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
       if (contactx == undefined) {
         contactCounter++;
         var contact = {
-          id: contactCounter,
-          fullName: result.senderPhoneNumber,
+          id: contactNumber,
+          fullName: contactNumber,
           role: 'None',
           about: 'Hola',
           status: 'offline'
         }
         data.contacts.push(contact);
+        //chatx==conversation
         var chatx = {
-          id: contactCounter,
+          id: contactNumber,
           userId: contactNumber,
           unseenMsgs: 0,
           chat: []
@@ -257,14 +300,16 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
           feedback: {
             isSent: result.feedback.isSent,
             isDelivered: result.feedback.isDelivered,
-            isSeen: false
+            isSeen: result.feedback.isSeen
           }
         }
+        if(contactNumber==result.senderPhoneNumber && !result.feedback.isSeen) chatx.unseenMsgs++;
         chatx.chat.push(chati);
         data.chats.push(chatx);
       }
       else {
         var chatx = data.chats.find(c => c.userId == contactNumber);
+        if(contactNumber==result.senderPhoneNumber && !result.feedback.isSeen) chatx.unseenMsgs++;
         var chati = {
           message: result.message,
           img: result.imageUrls[0], //Need to update
@@ -273,7 +318,7 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
           feedback: {
             isSent: result.feedback.isSent,
             isDelivered: result.feedback.isDelivered,
-            isSeen: false
+            isSeen: result.feedback.isSeen
           }
         }
         chatx.chat.push(chati);
@@ -286,7 +331,7 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
       const contact = data.contacts.find(c => c.id === chat.id)
 
       // @ts-ignore
-      contact.chat = { id: chat.id, unseenMsgs: chat.unseenMsgs, lastMessage: chat.chat[chat.chat.length - 1] }
+      contact.chat = { id: chat.id, unseenMsgs: chat.unseenMsgs, lastMessage: chat.chat[0] }
 
       return contact
     })
@@ -345,24 +390,40 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
     }
 
     const resChat = await Chat.find({
-      $or: [{ senderPhoneNumber: receivingPhoneNumber }, { receivingPhoneNumber: receivingPhoneNumber }]
-    })
+      $or: [
+        { $and: [{ senderPhoneNumber: receivingPhoneNumber }, { receivingPhoneNumber: userId }] },
+        { $and: [{ senderPhoneNumber: userId }, { receivingPhoneNumber: receivingPhoneNumber }] }
+      ]
+    });
+
+
+
     var contactCounter = 0;
-    resChat.forEach(result => {
+    resChat.forEach(async result => {
       var contactNumber = result.senderPhoneNumber == receivingPhoneNumber ? result.receivingPhoneNumber : result.senderPhoneNumber;
+      
+      //Need to change on focus
+      // if(contactNumber==result.senderPhoneNumber && !result.feedback.isSeen) {
+      //   result = await Chat.findOneAndUpdate(
+      //     { _id: result._id, 'feedback.isSeen': false }, // find the specific document
+      //     { $set: { 'feedback.isSeen': true } }, // update the isSeen property to true
+      //      { new: true } // return the updated document
+      //   );
+      // }
+
       var contactx = data.contacts.find(c => c.fullName == contactNumber);
       if (contactx == undefined) {
         contactCounter++;
         var contact = {
-          id: contactCounter,
-          fullName: result.senderPhoneNumber,
+          id: contactNumber,
+          fullName: contactNumber,
           role: 'None',
           about: 'Hola',
           status: 'offline'
         }
         data.contacts.push(contact);
         var chatx = {
-          id: contactCounter,
+          id: contactNumber,
           userId: contactNumber,
           unseenMsgs: 0,
           chat: []
@@ -375,7 +436,7 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
           feedback: {
             isSent: result.feedback.isSent,
             isDelivered: result.feedback.isDelivered,
-            isSeen: false
+            isSeen: result.feedback.isSeen
           }
         }
         chatx.chat.push(chati);
@@ -391,7 +452,7 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
           feedback: {
             isSent: result.feedback.isSent,
             isDelivered: result.feedback.isDelivered,
-            isSeen: false
+            isSeen: result.feedback.isSeen
           }
         }
         chatx.chat.push(chati);
@@ -411,6 +472,53 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
     }
 
     res.json(returnValue); // Respond with the list of chats
+  } catch (error) {
+    console.error('Error retrieving chats:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/add/:receivingPhoneNumber/:contactNumber', async (req, res) => {
+  try {
+    const receivingPhoneNumber = req.params.receivingPhoneNumber;
+    const contactNumber = req.params.contactNumber;
+
+    try {
+      const chat = new Chat({
+        senderPhoneNumber: contactNumber,
+        receivingPhoneNumber: receivingPhoneNumber,
+        message: "New Contact Added",
+      });
+      await chat.save();
+      res.status(201).json({ message: 'Message saved successfully' });
+
+    } catch (error) {
+      console.error('Error processing incoming message:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+  } catch (error) {
+    console.error('Error retrieving chats:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/focus/:receivingPhoneNumber/:contactNumber', async (req, res) => {
+  try {
+    const receivingPhoneNumber = req.params.receivingPhoneNumber;
+    const contactNumber = req.params.contactNumber;
+
+    // Filtering the documents where feedback.isSeen is false
+    const filter = { $and:  [{ senderPhoneNumber: contactNumber }, { receivingPhoneNumber: receivingPhoneNumber }, { 'feedback.isSeen': false }] };
+
+    // Update operation
+    const update = { $set: { 'feedback.isSeen': true } };
+
+    // Update multiple documents at once
+    await Chat.updateMany(filter, update);
+    res.status(200).send("Update success");
+
+
   } catch (error) {
     console.error('Error retrieving chats:', error);
     res.status(500).json({ error: 'Internal Server Error' });
