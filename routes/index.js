@@ -29,53 +29,26 @@ router.post('/jwt/login', async function(req, res, next) {
   let error = {
     email: ['Something went wrong']
   }
-
   console.log(email+" ||"+password);
   const user = await User.findOne({email , password});
   console.log(user);
   if (user) {
     const accessToken = jwt.sign({ id: user.id }, jwtConfig.secret, { expiresIn: jwtConfig.expirationTime })
-    
-    var data = JSON.stringify({});
-    const YOUR_API_KEY = 'KEY0184ECC16BEF4283F3D9E3DAECF94E2A_meL4LKx2rdobYfB6I9FCuC';
-    const credentialId = '1adfdb6e-5d76-4446-a673-e1c5a2a52af3'; 
-    const TelnyxToken = await axios.post(
-      `https://api.telnyx.com/v2/telephony_credentials/${credentialId}/token`,
-      {},
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${YOUR_API_KEY}`,
-        },
-      }
-    );
-
-    const TToken = TelnyxToken.data; 
-    console.log("Telnyx Token: "+ TToken);
-
     const response = {
       accessToken,
-      TToken,
       userData: { ...user._doc , password: undefined }
     }
-
     res.status(200).send(response);
   } else {
     error = {
       email: ['email or Password is Invalid']
     }
-
     res.status(400).send(error);
   }
 });
 
 router.get('/auth/me', async function(req, res, next) {
-   // ** Get token from header
-  // @ts-ignore
-  
   const token = req.headers.authorization
-  console.log("Token: "+token);
-  // ** Checks if the token is valid or expired
   jwt.verify(token, jwtConfig.secret, async (err, decoded) => {
     // ** If token is expired
     if (err) {
@@ -104,5 +77,30 @@ router.get('/auth/me', async function(req, res, next) {
     }
   })
 });
+
+// router.get('/newCount', async function(req,res){
+//   const receivingPhoneNumber="14143107099,16122941086,18162084008,19209667174,12097142411,13139153090,19252768578,19177750921,19177750904,19203758585,18039878979";
+//   const receivingPhoneNumbers = receivingPhoneNumber.split(',').map((item) => item.trim());
+
+// const result = await Chat.aggregate([
+//   {
+//     $match: {
+//       $and: [
+//         { receivingPhoneNumber: { $in: receivingPhoneNumbers } },
+//         { 'feedback.isSeen': false },
+//       ],
+//     },
+//   },
+//   {
+//     $group: {
+//       _id: '$receivingPhoneNumber',
+//       count: { $sum: 1 },
+//     },
+//   },
+// ]);
+
+// console.log(result);
+
+// });
 
 module.exports = router;

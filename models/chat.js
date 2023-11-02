@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 
 const chatSchema = new mongoose.Schema({
+  tId: {
+    type: String,
+    required: false,
+  },
   senderPhoneNumber: {
     type: String,
     required: true,

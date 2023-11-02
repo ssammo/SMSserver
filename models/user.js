@@ -25,6 +25,18 @@ const userSchema = new Schema({
   email: {
     type: String,
     required: true
+  },
+  tusername: {
+    type: String,
+    required: true
+  },
+  tpass: {
+    type: String,
+    required: true
+  },
+  numbers: {
+    type: String,
+    required: true
   }
 });
 
