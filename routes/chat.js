@@ -183,14 +183,10 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
 
 // Retrieve all chat messages
 // Define a route to get all chats of a specific sender phone number
+// Work on paste: https://pastebin.com/03TZEap1
 router.get('/:receivingPhoneNumber', async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
-
-    // Query the database to find all chats with the specified sender phone number
-    //const chats = await Chat.find({ receivingPhoneNumber });
-    //const senders = await Chat.distinct('senderPhoneNumber', { receivingPhoneNumber });
-
     const data = {
       profileUser: {
         id: 11,
@@ -209,23 +205,6 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
       chats: []
     }
 
-    // const results = await Chat.aggregate([
-    //   {
-    //     $match: { receivingPhoneNumber },
-    //   },
-    //   {
-    //     $sort: { timestamp: -1 }, // Sort chats by timestamp in descending order (newest first)
-    //   },
-    //   {
-    //     $group: {
-    //       _id: '$senderPhoneNumber',
-    //       lastChat: { $first: '$$ROOT' }, // Get the first (latest) chat message for each sender
-    //     },
-    //   },
-    //   {
-    //     $replaceRoot: { newRoot: '$lastChat' }, // Replace the root document with the last chat message
-    //   },
-    // ]);
     const resChat = await Chat.find({
       $or: [{ senderPhoneNumber: receivingPhoneNumber }, { receivingPhoneNumber: receivingPhoneNumber }]
     })
@@ -411,6 +390,31 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
     }
 
     res.json(returnValue); // Respond with the list of chats
+  } catch (error) {
+    console.error('Error retrieving chats:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/add/:receivingPhoneNumber/:contactNumber', async (req, res) => {
+  try {
+    const receivingPhoneNumber = req.params.receivingPhoneNumber;
+    const contactNumber = req.params.contactNumber;
+
+    try {
+      const chat = new Chat({
+        senderPhoneNumber: contactNumber,
+        receivingPhoneNumber: receivingPhoneNumber,
+        message: "New Contact Added",
+      });
+      await chat.save();
+      res.status(201).json({ message: 'Message saved successfully' });
+
+    } catch (error) {
+      console.error('Error processing incoming message:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+
   } catch (error) {
     console.error('Error retrieving chats:', error);
     res.status(500).json({ error: 'Internal Server Error' });

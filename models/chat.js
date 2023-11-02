@@ -28,6 +28,10 @@ const chatSchema = new mongoose.Schema({
       type: Boolean,
       default: false, // You can set a default value if needed
     },
+    isSeen: {
+      type: Boolean,
+      default: false, // You can set a default value if needed
+    },
   },
 });
 

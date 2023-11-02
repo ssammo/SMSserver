@@ -38,7 +38,7 @@ router.post('/jwt/login', async function(req, res, next) {
     
     var data = JSON.stringify({});
     const YOUR_API_KEY = 'KEY0184ECC16BEF4283F3D9E3DAECF94E2A_meL4LKx2rdobYfB6I9FCuC';
-    const credentialId = '780bf85f-0d0c-48e7-855a-de3b2ccd13ce'; 
+    const credentialId = '1adfdb6e-5d76-4446-a673-e1c5a2a52af3'; 
     const TelnyxToken = await axios.post(
       `https://api.telnyx.com/v2/telephony_credentials/${credentialId}/token`,
       {},
