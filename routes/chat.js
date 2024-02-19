@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const router = express.Router();
 const Chat = require('../models/chat'); // Import the Chat model
+const numberCheck = require('../middlewares/chats');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -21,147 +22,28 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage: storage });
-// Create a new chat message
-router.post('/', async (req, res) => {
-  try {
-    const { senderPhoneNumber, receivingPhoneNumber, message, imageUrls } = req.body;
-    console.log(req.body);
-
-    // Create a new chat document
-    const newChat = new Chat({
-      senderPhoneNumber,
-      receivingPhoneNumber,
-      message,
-      imageUrls,
-    });
-
-    // Save the chat message to the database
-    await newChat.save();
-
-    res.status(201).json(newChat); // Respond with the created chat message
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// Define a route for receiving incoming messages from Telnyx
-
-const updateChatFeedback = async (id) => {
-  try {
-    const updatedChat = await Chat.findOneAndUpdate(
-      { tId: id },
-      { $set: { 'feedback.isDelivered': true } },
-      { new: true }
-    );
-
-    if (updatedChat) {
-      console.log('Chat feedback updated successfully:', updatedChat);
-    } else {
-      console.log('No chat found with the provided id.');
-    }
-  } catch (error) {
-    console.error('Error updating chat feedback:', error);
-  }
-};
-
-const updateFinalChatFeedback = async (id) => {
-  try {
-    const updatedChat = await Chat.findOneAndUpdate(
-      { tId: id },
-      { $set: { 'feedback.isSeen': true } },
-      { new: true }
-    );
-
-    if (updatedChat) {
-      console.log('Chat feedback updated successfully:', updatedChat);
-    } else {
-      console.log('No chat found with the provided id.');
-    }
-  } catch (error) {
-    console.error('Error updating chat feedback:', error);
+const fileFilter = (req, file, cb) => {
+  if (
+      file.mimetype.startsWith('image/') ||  // Allow images
+      file.mimetype === 'image/gif' ||       // Allow GIFs
+      file.originalname.endsWith('.jpg') ||  // Allow specific extensions
+      file.originalname.endsWith('.jpeg') ||
+      file.originalname.endsWith('.png')
+  ) {
+      // Accept file
+      cb(null, true);
+  } else {
+      // Reject file
+      cb(new Error('Only image files (JPG, PNG, GIF) are allowed'), false);
   }
 };
 
 
-router.post('/webhook', async (req, res) => {
-  try {
-    console.log(req.body);
-    //console.log(JSON.stringify(req.body));
-    if(req.body.data.event_type=='message.received'){
-      const { from, to, text, media } = req.body.data.payload;
-      const chat = new Chat({
-        senderPhoneNumber: from.phone_number,
-        receivingPhoneNumber: to[0].phone_number,
-        message: text,
-      });
-      if (media.length > 0) chat.imageUrls = [media[0].url];
+const upload = multer({ storage: storage, fileFilter: fileFilter  });
 
-      await chat.save();
-    }
+//router.use(numberCheck);
 
-    if(req.body.data.event_type=='message.sent'){
-      const { id } = req.body.data.payload;
-      updateChatFeedback(id);
-      
-    }
-
-    if(req.body.data.event_type=='message.finalized'){
-      const { id } = req.body.data.payload;
-      updateFinalChatFeedback(id);
-      
-    }
-    
-
-    res.status(201).json({ message: 'Message saved successfully' });
-  } catch (error) {
-    console.error('Error processing incoming message:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/call/webhook', async (req, res) => {
-  try {
-    console.log(req.body);
-    //console.log(JSON.stringify(req.body));
-    if(req.body.data.event_type=='call.initiated'){
-      const { from, to } = req.body.data.payload;
-      const chat = new Chat({
-        senderPhoneNumber: from,
-        receivingPhoneNumber: to,
-        message: "Started Phone Call",
-      });
-      await chat.save();
-    }
-    else if(req.body.data.event_type=='call.answered'){
-      const { from, to } = req.body.data.payload;
-      const chat = new Chat({
-        senderPhoneNumber: to,
-        receivingPhoneNumber: from,
-        message: "Answered Phone Call",
-      });
-      await chat.save();
-    }
-    else if(req.body.data.event_type=='call.hangup'){
-      const { from, to } = req.body.data.payload;
-      const chat = new Chat({
-        senderPhoneNumber: to,
-        receivingPhoneNumber: from,
-        message: "Call Ended",
-      });
-      await chat.save();
-    }
-    
-
-    res.status(201).json({ message: 'Message saved successfully' });
-  } catch (error) {
-    console.error('Error processing incoming message:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, res) => {
+router.post('/send/:receivingPhoneNumber',numberCheck, upload.single('image'), async (req, res) => {
   try {
 
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
@@ -203,7 +85,11 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
             console.log(response);
             chat.tId=response.data.id;
             chat.feedback.isSent=true;
+            chat.cost= response.data.cost.amount;
+            let updatedUser= req.user;
+            updatedUser.balance -= chat.cost;
             await chat.save();
+            await updatedUser.save();
             const responsex = { newMessageData, id: dataObj.contact.id }
             res.status(201).json(responsex);
           }
@@ -215,6 +101,7 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
        );
     }
     else{
+      console.log(dataObj)
       telnyx.messages.create(
         {
           'from': receivingPhoneNumber, // Your Telnyx number
@@ -228,7 +115,11 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
           if(response){
             chat.tId=response.data.id;
             chat.feedback.isSent=true;
+            chat.cost= response.data.cost.amount;
+            let updatedUser= req.user;
+            updatedUser.balance -= chat.cost;
             await chat.save();
+            await updatedUser.save();
             const responsex = { newMessageData, id: dataObj.contact.id }
             res.status(201).json(responsex);
           }
@@ -246,8 +137,7 @@ router.post('/send/:receivingPhoneNumber', upload.single('image'), async (req, r
   }
 });
 
-
-router.get('/:receivingPhoneNumber', async (req, res) => {
+router.get('/:receivingPhoneNumber',numberCheck, async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
     const data = {
@@ -361,8 +251,7 @@ router.get('/:receivingPhoneNumber', async (req, res) => {
   }
 });
 
-
-router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
+router.get('/get-chat/:receivingPhoneNumber/:id',numberCheck, async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
     const userId = req.params.id;
@@ -478,7 +367,7 @@ router.get('/get-chat/:receivingPhoneNumber/:id', async (req, res) => {
   }
 });
 
-router.post('/add/:receivingPhoneNumber/:contactNumber', async (req, res) => {
+router.post('/add/:receivingPhoneNumber/:contactNumber',numberCheck, async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
     const contactNumber = req.params.contactNumber;
@@ -503,7 +392,7 @@ router.post('/add/:receivingPhoneNumber/:contactNumber', async (req, res) => {
   }
 });
 
-router.post('/focus/:receivingPhoneNumber/:contactNumber', async (req, res) => {
+router.post('/focus/:receivingPhoneNumber/:contactNumber',numberCheck, async (req, res) => {
   try {
     const receivingPhoneNumber = req.params.receivingPhoneNumber;
     const contactNumber = req.params.contactNumber;
@@ -524,4 +413,5 @@ router.post('/focus/:receivingPhoneNumber/:contactNumber', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 module.exports = router;

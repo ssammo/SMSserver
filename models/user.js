@@ -26,6 +26,10 @@ const userSchema = new Schema({
     type: String,
     required: true
   },
+  balance: {
+    type: Number,
+    default: 0.000
+  },
   tusername: {
     type: String,
     required: true
