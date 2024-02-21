@@ -85,9 +85,9 @@ router.post('/send/:receivingPhoneNumber',numberCheck, upload.single('image'), a
             console.log(response);
             chat.tId=response.data.id;
             chat.feedback.isSent=true;
-            chat.cost= response.data.cost.amount;
+            //chat.cost= response.data.cost.amount; 
             let updatedUser= req.user;
-            updatedUser.balance -= chat.cost;
+            updatedUser.balance -= 0.07;
             await chat.save();
             await updatedUser.save();
             const responsex = { newMessageData, id: dataObj.contact.id }
@@ -115,9 +115,9 @@ router.post('/send/:receivingPhoneNumber',numberCheck, upload.single('image'), a
           if(response){
             chat.tId=response.data.id;
             chat.feedback.isSent=true;
-            chat.cost= response.data.cost.amount;
+            //chat.cost= response.data.cost.amount;
             let updatedUser= req.user;
-            updatedUser.balance -= chat.cost;
+            updatedUser.balance -= 0.03;
             await chat.save();
             await updatedUser.save();
             const responsex = { newMessageData, id: dataObj.contact.id }
