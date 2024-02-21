@@ -23,6 +23,10 @@ const chatSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  cost: {
+    type: Number,
+    default: 0.000
+  },
   feedback: {
     isSent: {
       type: Boolean,
